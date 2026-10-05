@@ -8,3 +8,17 @@ xcuserdata/
 .env.*
 *.p12
 *.mobileprovision
+
+# Android local configuration, generated outputs, and signing files
+.gradle/
+.idea/
+local.properties
+*.iml
+.externalNativeBuild/
+.cxx/
+captures/
+android/app/release/
+*.apk
+*.aab
+*.jks
+*.keystore

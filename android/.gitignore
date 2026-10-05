@@ -1,0 +1,17 @@
+# Local Android Studio and Gradle state
+.idea/
+.gradle/
+*.iml
+local.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+.DS_Store
+
+# Generated packages, obfuscation mappings, and private signing material
+app/release/
+*.apk
+*.aab
+*.jks
+*.keystore

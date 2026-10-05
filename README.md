@@ -1,24 +1,42 @@
-# 拾账 · iPhone 记账 App
+# 拾账 · iPhone / Android 记账 App
 
-一个使用 SwiftUI 编写的开源记账 App，支持图片附件、自定义金额与付款方式，以及 Excel 导入导出。支持 iOS 17 及以上，所有界面为中文。
+一个使用 SwiftUI 和 Kotlin 编写的开源记账 App，支持图片附件、自定义金额与付款方式，以及 Excel 导入导出。支持 iOS 17 及以上、Android 7.0（API 24）及以上，所有界面为中文。
 
-Shizhang is an open-source iPhone expense tracker built with SwiftUI. It supports receipt photos, custom payment methods, exact monetary amounts, monthly summaries, and Excel (.xlsx) import/export. All records and images are stored locally.
+Shizhang is an open-source expense tracker for iPhone (SwiftUI) and Android (Kotlin). It supports receipt photos, custom payment methods, exact monetary amounts, monthly summaries, and Excel (.xlsx) import/export. All records and images are stored locally.
 
 ## 获取源码
 
 ```sh
 git clone https://github.com/mrlingan/shizhang.git
 cd shizhang
-open Shizhang.xcodeproj
 ```
 
 ## 运行
+
+### iPhone
 
 1. 打开 `Shizhang.xcodeproj`，选择 **Shizhang** Scheme。
 2. 选择 iPhone 模拟器，按 `⌘R` 运行。
 3. 若要安装到自己的 iPhone，在 Target → Signing & Capabilities 中选择你的 Apple 开发团队，并按需修改 Bundle Identifier。
 
 首次打开时 Xcode 会通过 Swift Package Manager 下载 [ZIPFoundation 0.9.20](https://github.com/weichsel/ZIPFoundation)，用于读取和生成 `.xlsx` 中的 ZIP 容器。第三方许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+### Android
+
+1. 在 Android Studio 中打开仓库的 `android/` 目录，等待 Gradle 同步。
+2. 选择 `app` 和 Android 模拟器 / 手机，点击 Run。
+3. 命令行构建：
+
+```sh
+cd android
+./gradlew :app:assembleDebug
+```
+
+使用 Java 25、Android SDK 37、Gradle 9.6.0 和 AGP 9.4.1（内置 Kotlin）。可使用 Android Studio 自带的 JBR；请在 SDK Manager 中安装对应 SDK。`local.properties` 由 Android Studio 按本机 SDK 路径生成，不纳入仓库。
+
+调试 APK 位于 `android/app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 会构建调试 APK，并作为构建产物上传；正式发布需要自己的 release 签名。
+
+安卓功能、文件格式、验证和源码说明见 [Android README](android/README.md)。
 
 ## 功能
 
@@ -27,7 +45,7 @@ open Shizhang.xcodeproj
 - 微信、支付宝、银行卡和现金，以及自行添加的付款方式；正在被账单使用的方式不能删除。
 - 分类、日期、备注、搜索、收支筛选、月份切换。
 - 编辑与确认删除账单；月度收入、支出、结余及分类占比。
-- JSON 账本与图片保存到 App 的 Application Support 目录；写入失败会提示，账本读取失败时保留原文件并禁止覆盖。
+- JSON 账本与图片保存到 App 的私有目录；写入失败会提示，账本读取失败时保留原文件并禁止覆盖。
 - Excel `.xlsx` 导入与导出，可导出全部账单或指定月份；内置带分类下拉选项的导入模板。
 
 图片“上传”在当前版本指从相册导入账单附件并保存在本机。当前版本没有服务器、账号、云同步或 OCR。卸载 App 会移除本地数据。系统相册选择器不需要读取整个照片库的权限。
@@ -59,6 +77,8 @@ open Shizhang.xcodeproj
 
 ## 验证
 
+### iPhone
+
 `⌘U` 运行 `ShizhangTests`，覆盖金额解析、月份统计、付款方式验证、图片保存与清理、账单重载、损坏账本保护，以及 Excel 往返、外部表格兼容、日期系统、错误行、批量导入与重复 ID。
 
 命令行也可运行（设备名称以本机安装的模拟器为准）：
@@ -68,6 +88,27 @@ xcodebuild test -project Shizhang.xcodeproj -scheme Shizhang -destination 'platf
 ```
 
 已在 Xcode 27 / iOS 27 模拟器中通过编译与 13 项自动测试，并手动验证图片导入、大图预览、金额修改、自定义付款方式和重启后的数据保留；Excel 导出、模板保存、外部表格导入与导入完成提示、重复账单跳过和月份筛选也已在模拟器验证。
+
+### Android
+
+```sh
+cd android
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+# 启动模拟器或连接独立测试设备后：
+./gradlew :app:connectedDebugAndroidTest
+```
+
+安卓版本已通过 13 项单元测试、3 项模拟器测试及 Lint（0 错误），并手动验证系统文件保存、外部 Excel 导入、重复账单跳过及重启后的数据保留。设备测试会清空测试设备上拾账的账本，请在模拟器或独立测试设备运行。
+
+### Android 界面预览
+
+以下截图使用验证用示例账单；新安装的应用不预置示例数据。
+
+<p>
+  <img src="android/docs/screenshots/ledger.png" width="240" alt="安卓账本页面" />
+  <img src="android/docs/screenshots/reports.png" width="240" alt="安卓月度统计页面" />
+  <img src="android/docs/screenshots/data.png" width="240" alt="安卓 Excel 导入导出页面" />
+</p>
 
 ## 代码结构
 
@@ -84,6 +125,9 @@ xcodebuild test -project Shizhang.xcodeproj -scheme Shizhang -destination 'platf
 | `Shizhang/Resources/账单导入模板.xlsx` | 空白 Excel 导入模板与填写说明 |
 | `ShizhangTests/LedgerTests.swift` | 核心逻辑测试 |
 | `ShizhangTests/ExcelTests.swift` | Excel 互操作与批量导入测试 |
+| `android/` | 独立 Kotlin Android 工程、界面、本地存储与 Excel 读写 |
+| `android/app/src/test/` | Android 金额、存储、统计与 Excel 单元测试 |
+| `android/app/src/androidTest/` | Android 真实设备界面与图片处理测试 |
 
 ## 参与贡献
 

@@ -1,0 +1,15 @@
+<resources>
+    <style name="Base.Theme.Shizhang" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">#217D66</item>
+        <item name="colorPrimaryVariant">#1F3338</item>
+        <item name="colorSecondary">#217D66</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F5F5F0</item>
+        <item name="android:navigationBarColor">#1F3338</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#F5F5F0</item>
+        <item name="android:colorAccent">#217D66</item>
+    </style>
+    <style name="Theme.Shizhang" parent="Base.Theme.Shizhang"/>
+</resources>
