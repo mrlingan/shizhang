@@ -93,11 +93,44 @@ final class LedgerStore: ObservableObject {
         try commit(candidate)
     }
 
+    /// Append a validated batch in one atomic write; never overwrite existing records.
+    @discardableResult
+    func importRecords(_ incoming: [LedgerRecord]) throws -> LedgerImportResult {
+        var candidate = snapshot
+        var knownIDs = Set(candidate.records.map(\.id))
+        var imported = 0
+        var skipped = 0
+        for var record in incoming {
+            guard record.amountMinor > 0, record.amountMinor <= 99_999_999_999,
+                  record.date.timeIntervalSinceReferenceDate.isFinite,
+                  RecordCategory.options(for: record.kind).contains(record.category),
+                  record.imageNames.isEmpty else { throw StoreError.invalidRecord }
+            let name = record.paymentMethod.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, name.count <= 20 else { throw StoreError.invalidMethod }
+            guard knownIDs.insert(record.id).inserted else { skipped += 1; continue }
+            if let existing = candidate.paymentMethods.first(where: { $0.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
+                record.paymentMethod = existing
+            } else {
+                record.paymentMethod = name
+                candidate.paymentMethods.append(name)
+            }
+            candidate.records.append(record)
+            imported += 1
+        }
+        if imported > 0 { try commit(candidate) }
+        return LedgerImportResult(imported: imported, skipped: skipped)
+    }
+
     private func commit(_ candidate: LedgerSnapshot) throws {
         guard canWrite else { throw StoreError.unreadableLedger }
         try JSONEncoder().encode(candidate).write(to: fileURL, options: .atomic)
         snapshot = candidate
     }
+}
+
+struct LedgerImportResult {
+    let imported: Int
+    let skipped: Int
 }
 
 enum StoreError: LocalizedError {

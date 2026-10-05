@@ -7,6 +7,7 @@ struct ContentView: View {
             LedgerView().tabItem { Label("账本", systemImage: "square.stack.3d.up") }
             ReportsView().tabItem { Label("统计", systemImage: "chart.bar.xaxis") }
             PaymentMethodsView().tabItem { Label("付款方式", systemImage: "creditcard") }
+            ExcelTransferView().tabItem { Label("数据", systemImage: "arrow.up.arrow.down.square") }
         }
         .alert("无法读取账本", isPresented: Binding(get: { store.loadError != nil }, set: { if !$0 { store.loadError = nil } })) {
             Button("知道了", role: .cancel) { store.loadError = nil }

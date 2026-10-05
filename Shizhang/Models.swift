@@ -1,12 +1,12 @@
 import Foundation
 
-enum RecordKind: String, Codable, CaseIterable, Identifiable {
+enum RecordKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case expense, income
     var id: String { rawValue }
     var title: String { self == .expense ? "支出" : "收入" }
 }
 
-enum RecordCategory: String, Codable, CaseIterable, Identifiable {
+enum RecordCategory: String, Codable, CaseIterable, Identifiable, Sendable {
     case food, shopping, transport, home, entertainment, health, other
     case salary, bonus, gift, refund
     var id: String { rawValue }
@@ -45,7 +45,7 @@ enum RecordCategory: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct LedgerRecord: Identifiable, Codable, Equatable {
+struct LedgerRecord: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
     var kind: RecordKind
     var amountMinor: Int64
