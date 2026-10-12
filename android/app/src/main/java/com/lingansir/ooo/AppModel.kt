@@ -11,14 +11,14 @@ import androidx.lifecycle.MutableLiveData
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.Executors
 
 data class EditorDraft(
     val id: String = UUID.randomUUID().toString(), val editing: Boolean = false,
     var kind: Kind = Kind.EXPENSE, var amount: String = "", var category: Category = Category.FOOD,
-    var method: String, var date: LocalDate = LocalDate.now(), var note: String = "",
+    var method: String, var date: LocalDateTime = LocalDateTime.now().withSecond(0).withNano(0), var note: String = "",
     val retained: MutableList<String> = mutableListOf(), val added: MutableList<String> = mutableListOf()
 ) {
     fun json(): String = JSONObject().put("id", id).put("editing", editing).put("kind", kind.name)
@@ -30,7 +30,7 @@ data class EditorDraft(
             fun list(key: String): MutableList<String> = o.getJSONArray(key).let { a -> MutableList(a.length()) { a.getString(it) } }
             return EditorDraft(o.getString("id"), o.getBoolean("editing"), Kind.valueOf(o.getString("kind")),
                 o.getString("amount"), Category.valueOf(o.getString("category")), o.getString("method"),
-                LocalDate.parse(o.getString("date")), o.getString("note"), list("retained"), list("added"))
+                LedgerDates.parseStored(o.getString("date")), o.getString("note"), list("retained"), list("added"))
         }
     }
 }

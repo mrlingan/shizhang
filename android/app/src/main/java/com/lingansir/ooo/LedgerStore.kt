@@ -4,7 +4,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-import java.time.LocalDate
 import java.util.UUID
 
 object LedgerJson {
@@ -15,17 +14,17 @@ object LedgerJson {
     fun readRecord(o: JSONObject) = LedgerRecord(
         UUID.fromString(o.getString("id")).toString(), Kind.valueOf(o.getString("kind")),
         o.getLong("amountMinor"), Category.valueOf(o.getString("category")),
-        o.getString("paymentMethod"), LocalDate.parse(o.getString("date")),
+        o.getString("paymentMethod"), LedgerDates.parseStored(o.getString("date")),
         o.getString("note"), strings(o.getJSONArray("imageNames")))
     fun encode(s: LedgerSnapshot) = JSONObject().put("version", 1)
         .put("records", JSONArray().apply { s.records.forEach { put(record(it)) } })
-        .put("paymentMethods", JSONArray(s.paymentMethods)).toString()
+        .put("paymentMethods", JSONArray(s.paymentMethods)).put("categoriesEnabled", s.categoriesEnabled).toString()
     fun decode(text: String): LedgerSnapshot {
         val o = JSONObject(text)
         require(o.getInt("version") == 1) { "账本版本不受支持。" }
         val records = o.getJSONArray("records")
         val result = LedgerSnapshot(List(records.length()) { readRecord(records.getJSONObject(it)) },
-            strings(o.getJSONArray("paymentMethods")))
+            strings(o.getJSONArray("paymentMethods")), o.optBoolean("categoriesEnabled", true))
         require(result.paymentMethods.isNotEmpty() && result.paymentMethods.all { it.isNotBlank() && it.codePointCount(0,it.length) <= 20 })
         require(result.paymentMethods.map { it.lowercase() }.distinct().size == result.paymentMethods.size)
         require(result.records.map { it.id }.distinct().size == result.records.size)
@@ -78,6 +77,9 @@ class LedgerStore(private val directory: File) {
             commit(snapshot.copy(records = snapshot.records.filterNot { it.id == record.id } + updated))
             previous?.imageNames?.filterNot { it in updated.imageNames }?.forEach { imageFile(it).delete() }
         } catch (e: Exception) { written.forEach { imageFile(it).delete() }; throw e }
+    }
+    @Synchronized fun setCategoriesEnabled(enabled: Boolean) {
+        commit(snapshot.copy(categoriesEnabled = enabled))
     }
     @Synchronized fun delete(record: LedgerRecord) {
         val actual = snapshot.records.find { it.id == record.id } ?: return

@@ -196,7 +196,7 @@ private struct ExcelImportPreviewView: View {
                     ForEach(incoming.prefix(10)) { record in
                         VStack(alignment: .leading, spacing: 6) {
                             RecordRow(record: record)
-                            Text("\(record.date.formatted(.dateTime.year().month().day())) · \(record.category.title)")
+                            Text("\(record.date.formatted(.dateTime.year().month().day().hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))) · \(store.snapshot.categoriesEnabled ? record.category.title : record.kind.title)")
                                 .font(.caption).foregroundStyle(AppTheme.muted)
                         }
                     }

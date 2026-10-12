@@ -67,6 +67,12 @@ final class LedgerStore: ObservableObject {
         }
     }
 
+    func setCategoriesEnabled(_ enabled: Bool) throws {
+        var candidate = snapshot
+        candidate.categoriesEnabled = enabled
+        try commit(candidate)
+    }
+
     func delete(_ record: LedgerRecord) throws {
         var candidate = snapshot
         candidate.records.removeAll { $0.id == record.id }

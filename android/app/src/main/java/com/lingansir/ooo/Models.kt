@@ -3,6 +3,8 @@ package com.lingansir.ooo
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.time.YearMonth
 import java.util.UUID
 
@@ -19,11 +21,12 @@ enum class Category(val title: String, val glyph: String) {
 }
 data class LedgerRecord(
     val id: String = UUID.randomUUID().toString(), val kind: Kind, val amountMinor: Long,
-    val category: Category, val paymentMethod: String, val date: LocalDate,
+    val category: Category, val paymentMethod: String, val date: LocalDateTime,
     val note: String = "", val imageNames: List<String> = emptyList()
 )
 data class LedgerSnapshot(val records: List<LedgerRecord> = emptyList(),
-    val paymentMethods: List<String> = listOf("微信支付", "支付宝", "银行卡", "现金"))
+    val paymentMethods: List<String> = listOf("微信支付", "支付宝", "银行卡", "现金"),
+    val categoriesEnabled: Boolean = true)
 data class ImportResult(val imported: Int, val skipped: Int)
 object Money {
     const val MAX = 99_999_999_999L
@@ -44,3 +47,10 @@ object Money {
 fun List<LedgerRecord>.inMonth(month: YearMonth) = filter { YearMonth.from(it.date) == month }
     .sortedWith(compareByDescending<LedgerRecord> { it.date }.thenBy { it.id })
 fun List<LedgerRecord>.total(kind: Kind): Long = filter { it.kind == kind }.sumOf { it.amountMinor }
+
+
+object LedgerDates {
+    val display: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    fun parseStored(value: String): LocalDateTime = if ('T' in value) LocalDateTime.parse(value)
+        else LocalDate.parse(value).atStartOfDay()
+}

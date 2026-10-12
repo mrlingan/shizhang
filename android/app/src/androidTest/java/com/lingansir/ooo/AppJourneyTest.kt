@@ -84,7 +84,7 @@ class AppJourneyTest {
     @Test fun androidXmlCodecReadsSharedStringsAndMatchesExcelTemplate() {
         val template=context.assets.open("ledger-template.xlsx").use { it.readBytes() }
         assertTrue(ExcelWorkbook.read(template,"模板.xlsx").issues.isEmpty())
-        val r=LedgerRecord(kind=Kind.INCOME,amountMinor=888899,category=Category.SALARY,paymentMethod="银行卡",date=LocalDate.of(2026,10,5),note="工资 & 奖励")
+        val r=LedgerRecord(kind=Kind.INCOME,amountMinor=888899,category=Category.SALARY,paymentMethod="银行卡",date=LocalDate.of(2026,10,5).atStartOfDay(),note="工资 & 奖励")
         val batch=ExcelWorkbook.read(ExcelWorkbook.export(listOf(r)),"安卓账单.xlsx")
         assertEquals(listOf(r),batch.records); assertTrue(batch.issues.isEmpty())
     }

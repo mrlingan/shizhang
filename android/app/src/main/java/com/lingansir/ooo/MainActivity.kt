@@ -1,6 +1,9 @@
 package com.lingansir.ooo
 
 import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import android.content.ActivityNotFoundException
+import android.provider.MediaStore
 import android.app.Dialog
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -134,7 +137,8 @@ class MainActivity : AppCompatActivity() {
     }
     private fun handleEvent(event: UiEvent) {
         when(event.type) {
-            "error" -> message("操作失败", event.payload.toString())
+            "error" -> { if(tab==4)render(); message("操作失败", event.payload.toString()) }
+            "settings" -> render()
             "saved" -> { model.clearDraft(); hideKeyboard(); render(); toast("账单已保存") }
             "deleted" -> { model.clearDraft(); hideKeyboard(); render(); toast("账单已删除") }
             "changed" -> { render(); toast(event.payload?.toString() ?: "已更新") }
@@ -170,12 +174,12 @@ class MainActivity : AppCompatActivity() {
             (body.getChildAt(0) as? ScrollView)?.let { scroll -> scroll.post { scroll.scrollTo(0, scrollY) } }
             return
         }
-        when(tab) { 0 -> showLedger(); 1 -> showReports(); 2 -> showMethods(); 3 -> showData() }
+        when(tab) { 0 -> showLedger(); 1 -> showReports(); 2 -> showMethods(); 3 -> showData(); 4 -> showSettings() }
         if (tab == 0) footer.addView(button("记一笔", true, R.drawable.ic_plus) { openEditor(null) },
             LinearLayout.LayoutParams(-1, dp(56)).apply { setMargins(dp(22), dp(8), dp(22), dp(12)) })
         footer.addView(View(this).apply { setBackgroundColor(Palette.line) }, LinearLayout.LayoutParams(-1, dp(1)))
         val nav = row().apply { setPadding(dp(10), dp(4), dp(10), dp(4)); setBackgroundColor(Color.WHITE) }
-        listOf("账本", "统计", "付款方式", "数据").forEachIndexed { index, label ->
+        listOf("账本", "统计", "付款方式", "数据", "设置").forEachIndexed { index, label ->
             val item = column().apply {
                 gravity = Gravity.CENTER; minimumHeight = dp(60)
                 background = background(if (index == tab) Palette.mint else Color.TRANSPARENT, 18)
@@ -183,7 +187,7 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { if (!busy()) { hideKeyboard(); tab = index; render() } }
             }
             val icon = ImageView(this).apply {
-                setImageResource(listOf(R.drawable.ic_ledger, R.drawable.ic_reports, R.drawable.ic_payment, R.drawable.ic_data)[index])
+                setImageResource(listOf(R.drawable.ic_ledger, R.drawable.ic_reports, R.drawable.ic_payment, R.drawable.ic_data, R.drawable.ic_settings)[index])
                 imageTintList = ColorStateList.valueOf(if (tab == index) Palette.accent else Palette.muted)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
@@ -224,7 +228,7 @@ class MainActivity : AppCompatActivity() {
         }); gap(page,12)
         val searchBox = row(Gravity.CENTER_VERTICAL).apply { setPadding(dp(12),0,dp(10),0); background = background(Color.WHITE,16) }
         searchBox.addView(ImageView(this).apply { setImageResource(R.drawable.ic_search) }, LinearLayout.LayoutParams(dp(20),dp(20)))
-        val input = input("搜索备注、分类或付款方式", search, single = true).apply { background = null; textSize = 13f }
+        val input = input(if(store.snapshot.categoriesEnabled) "搜索备注、分类或付款方式" else "搜索备注或付款方式", search, single = true).apply { background = null; textSize = 13f }
         searchBox.addView(input, LinearLayout.LayoutParams(0,dp(50),1f))
         searchBox.addView(iconButton(R.drawable.ic_close,"清除搜索") { input.setText("") }, LinearLayout.LayoutParams(dp(40),dp(44)))
         input.onChange { search = it; recordLimit = 100; updateRecords() }
@@ -235,13 +239,13 @@ class MainActivity : AppCompatActivity() {
         val list = rowsView ?: return
         list.removeAllViews()
         val records = store.snapshot.records.inMonth(month).filter { (filter == null || it.kind == filter) &&
-            (search.isBlank() || "${it.note} ${it.category.title} ${it.paymentMethod}".contains(search, true)) }
+            (search.isBlank() || "${it.note} ${if(store.snapshot.categoriesEnabled) it.category.title else ""} ${it.paymentMethod}".contains(search, true)) }
         countLabel?.text = "${records.size} 笔"
         if (records.isEmpty()) {
             empty(list, if (search.isNotBlank() || filter != null) "没有找到相关账单" else "这个月，还没有记录", "从一笔早餐、一次通勤开始。", R.drawable.ic_ledger)
             return
         }
-        records.take(recordLimit).groupBy { it.date }.forEach { (date, dayRecords) ->
+        records.take(recordLimit).groupBy { it.date.toLocalDate() }.forEach { (date, dayRecords) ->
             val label = row(Gravity.CENTER_VERTICAL)
             label.addView(text(date.format(DateTimeFormatter.ofPattern("MM月dd日 EEEE", Locale.CHINA)),12,true,Palette.muted), LinearLayout.LayoutParams(0,-2,1f))
             label.addView(text("支出 ${Money.formatted(dayRecords.total(Kind.EXPENSE))}",11,false,Palette.muted))
@@ -260,10 +264,10 @@ class MainActivity : AppCompatActivity() {
     }
     private fun recordRow(r: LedgerRecord): View {
         val row = row(Gravity.CENTER_VERTICAL).apply { setPadding(0,dp(12),0,dp(12)); minimumHeight=dp(72) }
-        row.addView(categoryBadge(r.category), LinearLayout.LayoutParams(dp(44),dp(44)))
+        row.addView(if(store.snapshot.categoriesEnabled) categoryBadge(r.category) else text(r.kind.title,14,true,Palette.accent), LinearLayout.LayoutParams(dp(44),dp(44)))
         val info = column().apply { setPadding(dp(12),0,dp(8),0) }
-        info.addView(text(r.note.ifEmpty { r.category.title },15,true).apply { maxLines=1; ellipsize=android.text.TextUtils.TruncateAt.END })
-        gap(info,5); info.addView(text(r.paymentMethod + if (r.imageNames.isEmpty()) "" else " · 图片 ${r.imageNames.size}",12,false,Palette.muted))
+        info.addView(text(r.note.ifEmpty { if(store.snapshot.categoriesEnabled) r.category.title else r.kind.title },15,true).apply { maxLines=1; ellipsize=android.text.TextUtils.TruncateAt.END })
+        gap(info,5); info.addView(text(r.date.format(DateTimeFormatter.ofPattern("HH:mm")) + " · " + r.paymentMethod + if (r.imageNames.isEmpty()) "" else " · 图片 ${r.imageNames.size}",12,false,Palette.muted))
         row.addView(info, LinearLayout.LayoutParams(0,-2,1f))
         row.addView(text("${if(r.kind==Kind.INCOME) "+" else "−"}${Money.formatted(r.amountMinor)}",16,true,if(r.kind==Kind.INCOME) Palette.accent else Palette.ink).apply {
             gravity=Gravity.END; maxLines=1; TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this,10,16,1,2)
@@ -281,6 +285,7 @@ class MainActivity : AppCompatActivity() {
         summary.addView(text("本月总${reportKind.title}",13,false,Palette.muted)); gap(summary,12)
         summary.addView(text("¥ ${Money.formatted(total)}",32,true)); gap(summary,10)
         summary.addView(text("${records.size} 笔记录",12,false,Palette.muted)); page.addView(summary); gap(page,24)
+        if(!store.snapshot.categoriesEnabled) return
         page.addView(text("分类分布",20,true)); gap(page,16)
         val totals=Category.options(reportKind).map { category -> category to records.filter { it.category==category }.sumOf { it.amountMinor } }
             .filter { it.second>0 }.sortedByDescending { it.second }
@@ -328,6 +333,22 @@ class MainActivity : AppCompatActivity() {
             hideKeyboard(); model.work("changed") { store.addMethod(name.text.toString()); "付款方式已添加" }
         }); page.addView(add); gap(page,20)
         page.addView(text("账单与图片保存在本机，卸载 App 会移除数据。",12,false,Palette.muted))
+    }
+    private fun showSettings() {
+        val page=page()
+        title(page,"设置","按你的习惯记账","调整记账偏好。",R.drawable.ic_settings)
+        val settings=card()
+        settings.addView(com.google.android.material.switchmaterial.SwitchMaterial(this).apply {
+            text="启用分类"; textSize=16f; setTextColor(Palette.ink)
+            contentDescription="启用分类"; isChecked=store.snapshot.categoriesEnabled
+            setOnCheckedChangeListener { _,enabled ->
+                if(busy()) { isChecked=store.snapshot.categoriesEnabled }
+                else model.work("settings") { store.setCategoriesEnabled(enabled); null }
+            }
+        })
+        gap(settings,12)
+        settings.addView(text("关闭后隐藏分类选择、账单分类和分类统计，新账单归入“其他”。已有分类会保留，重新开启后可继续查看。",13,false,Palette.muted))
+        page.addView(settings)
     }
     private fun showData() {
         val page=page()
@@ -380,25 +401,27 @@ class MainActivity : AppCompatActivity() {
         amount.onChange { draft.amount=it }
         moneyRow.addView(amount,LinearLayout.LayoutParams(0,dp(68),1f)); money.addView(moneyRow)
         money.addView(text("手动输入，精确到分",11,false,Palette.accent)); page.addView(money); gap(page,20)
-        val categories=card(); categories.addView(text("分类",16,true)); gap(categories,12)
-        val options=Category.options(draft.kind)
-        options.chunked(4).forEach { chunk ->
-            val row=row()
-            chunk.forEach { category ->
-                val item=column().apply {
-                    gravity=Gravity.CENTER; setPadding(dp(2),dp(10),dp(2),dp(10))
-                    background=background(if(draft.category==category)Palette.mint else Color.TRANSPARENT,15)
-                    contentDescription="分类：${category.title}"; isFocusable=true
-                    setOnClickListener { if(!busy()) { draft.category=category; hideKeyboard(); render() } }
+        if(store.snapshot.categoriesEnabled) {
+            val categories=card(); categories.addView(text("分类",16,true)); gap(categories,12)
+            val options=Category.options(draft.kind)
+            options.chunked(4).forEach { chunk ->
+                val row=row()
+                chunk.forEach { category ->
+                    val item=column().apply {
+                        gravity=Gravity.CENTER; setPadding(dp(2),dp(10),dp(2),dp(10))
+                        background=background(if(draft.category==category)Palette.mint else Color.TRANSPARENT,15)
+                        contentDescription="分类：${category.title}"; isFocusable=true
+                        setOnClickListener { if(!busy()) { draft.category=category; hideKeyboard(); render() } }
+                    }
+                    item.addView(categoryBadge(category),LinearLayout.LayoutParams(dp(38),dp(38))); gap(item,6)
+                    item.addView(text(category.title,12,draft.category==category))
+                    row.addView(item,LinearLayout.LayoutParams(0,-2,1f))
                 }
-                item.addView(categoryBadge(category),LinearLayout.LayoutParams(dp(38),dp(38))); gap(item,6)
-                item.addView(text(category.title,12,draft.category==category))
-                row.addView(item,LinearLayout.LayoutParams(0,-2,1f))
+                repeat(4-chunk.size) { row.addView(View(this),LinearLayout.LayoutParams(0,1,1f)) }
+                categories.addView(row)
             }
-            repeat(4-chunk.size) { row.addView(View(this),LinearLayout.LayoutParams(0,1,1f)) }
-            categories.addView(row)
+            page.addView(categories); gap(page,20)
         }
-        page.addView(categories); gap(page,20)
         val details=card()
         details.addView(text("付款方式",14,true)); gap(details,10)
         details.addView(button(draft.method) {
@@ -406,8 +429,12 @@ class MainActivity : AppCompatActivity() {
             AlertDialog.Builder(this).setTitle("选择付款方式").setSingleChoiceItems(methods.toTypedArray(),methods.indexOf(draft.method)) { dialog,index -> draft.method=methods[index]; dialog.dismiss(); render() }
                 .setNeutralButton("添加付款方式") { _,_ -> addMethodInEditor() }.setNegativeButton("取消",null).show()
         }); gap(details,18); details.addView(text("日期",14,true)); gap(details,8)
-        details.addView(button(draft.date.toString()) {
-            DatePickerDialog(this,{ _,y,m,d -> draft.date=LocalDate.of(y,m+1,d); render() },draft.date.year,draft.date.monthValue-1,draft.date.dayOfMonth).show()
+        details.addView(button(draft.date.toLocalDate().toString()) {
+            DatePickerDialog(this,{ _,y,m,d -> draft.date=LocalDate.of(y,m+1,d).atTime(draft.date.toLocalTime()); render() },draft.date.year,draft.date.monthValue-1,draft.date.dayOfMonth).show()
+        }); gap(details,12)
+        details.addView(text("时间",14,true)); gap(details,8)
+        details.addView(button(draft.date.format(DateTimeFormatter.ofPattern("HH:mm"))) {
+            TimePickerDialog(this,{ _,hour,minute -> draft.date=draft.date.withHour(hour).withMinute(minute).withSecond(0).withNano(0); render() },draft.date.hour,draft.date.minute,true).show()
         }); gap(details,18); details.addView(text("备注",14,true)); gap(details,10)
         details.addView(input("这笔钱，用在了什么地方？",draft.note).apply { minLines=2; maxLines=5; onChange { draft.note=it } })
         page.addView(details); gap(page,20)
@@ -433,9 +460,7 @@ class MainActivity : AppCompatActivity() {
         if(imageItems.isNotEmpty()) { photos.addView(photoRow); gap(photos,12) }
         photos.addView(button("从相册添加图片",false,R.drawable.ic_image) {
             if(imageItems.size>=3)message("图片已满","每笔最多添加 3 张图片，请先移除一张。")
-            else photoPicker.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE); type="image/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true)
-            })
+            else openGallery()
         }); gap(photos,8); photos.addView(text("图片仅保存在本机，最长边压缩至 1800 像素。",11,false,Palette.muted)); page.addView(photos)
         if(draft.editing) { gap(page,20); page.addView(button("删除这笔账单") { store.snapshot.records.find { it.id==draft.id }?.let(::deleteRecord) }.apply { setTextColor(Palette.expense) }) }
         footer.addView(button("保存账单",true) {
@@ -443,11 +468,28 @@ class MainActivity : AppCompatActivity() {
             if(value==null) { message("请检查金额","请输入大于 0、最多两位小数的金额，最大 999999999.99。") }
             else {
                 hideKeyboard()
-                val record=LedgerRecord(draft.id,draft.kind,value,draft.category,draft.method,draft.date,draft.note.trim(),draft.retained.toList())
+                val category=if(store.snapshot.categoriesEnabled)draft.category else
+                    store.snapshot.records.find { it.id==draft.id && it.kind==draft.kind }?.category ?: Category.OTHER
+                val record=LedgerRecord(draft.id,draft.kind,value,category,draft.method,draft.date,draft.note.trim(),draft.retained.toList())
                 val files=draft.added.toList()
                 model.work("saved") { store.save(record,files.map { model.tempImage(it).readBytes() }); null }
             }
         },LinearLayout.LayoutParams(-1,dp(56)).apply { setMargins(dp(22),dp(10),dp(22),dp(10)) })
+    }
+    private fun openGallery() {
+        val intent=Intent(Intent.ACTION_PICK).apply {
+            setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,"image/*")
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try { photoPicker.launch(intent) }
+        catch(_: ActivityNotFoundException) {
+            try {
+                photoPicker.launch(Intent(MediaStore.ACTION_PICK_IMAGES).apply { type="image/*" })
+            } catch(_: ActivityNotFoundException) {
+                message("无法打开相册","请安装或启用相册应用后重试。")
+            }
+        }
     }
     private fun addMethodInEditor() {
         val input=input("例如：零钱包",single=true)
@@ -463,7 +505,7 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("继续编辑",null).setPositiveButton("放弃") { _,_ -> model.clearDraft(); hideKeyboard(); render() }.show()
     }
     private fun deleteRecord(r: LedgerRecord) {
-        AlertDialog.Builder(this).setTitle("删除这笔账单？").setMessage("${r.category.title} · ¥ ${Money.formatted(r.amountMinor)}\n账单及其图片将一起删除。")
+        AlertDialog.Builder(this).setTitle("删除这笔账单？").setMessage("${if(store.snapshot.categoriesEnabled)r.category.title else r.kind.title} · ¥ ${Money.formatted(r.amountMinor)}\n账单及其图片将一起删除。")
             .setNegativeButton("取消",null).setPositiveButton("删除") { _,_ -> model.work("deleted") { store.delete(r); null } }.show()
     }
     private fun showImportPreview() {
@@ -483,7 +525,7 @@ class MainActivity : AppCompatActivity() {
             if(batch.issues.size>100)content.addView(text("还有 ${batch.issues.size-100} 行错误。",13))
         }
         if(incoming.isNotEmpty()) { gap(content,20); content.addView(text("账单示例（最多 10 笔）",15,true)) }
-        incoming.take(10).forEach { gap(content,10); content.addView(text("${it.date} · ${it.category.title}\n${it.kind.title} ¥ ${Money.formatted(it.amountMinor)} · ${it.paymentMethod}",13)) }
+        incoming.take(10).forEach { gap(content,10); content.addView(text("${it.date.format(LedgerDates.display)} · ${if(store.snapshot.categoriesEnabled)it.category.title else it.kind.title}\n${it.kind.title} ¥ ${Money.formatted(it.amountMinor)} · ${it.paymentMethod}",13)) }
         scroll.addView(content)
         val dialog=AlertDialog.Builder(this).setTitle("确认导入").setView(scroll).setNegativeButton("取消",null)
             .setPositiveButton("导入 ${incoming.size} 笔") { _,_ -> model.work("imported") { store.importRecords(batch.records) } }.create()

@@ -8,6 +8,7 @@ struct ContentView: View {
             ReportsView().tabItem { Label("统计", systemImage: "chart.bar.xaxis") }
             PaymentMethodsView().tabItem { Label("付款方式", systemImage: "creditcard") }
             ExcelTransferView().tabItem { Label("数据", systemImage: "arrow.up.arrow.down.square") }
+            SettingsView().tabItem { Label("设置", systemImage: "gearshape") }
         }
         .alert("无法读取账本", isPresented: Binding(get: { store.loadError != nil }, set: { if !$0 { store.loadError = nil } })) {
             Button("知道了", role: .cancel) { store.loadError = nil }
@@ -28,7 +29,7 @@ struct LedgerView: View {
     private var filtered: [LedgerRecord] {
         store.records(in: month).filter {
             (filter == nil || $0.kind == filter) && (search.isEmpty ||
-                "\($0.note) \($0.category.title) \($0.paymentMethod)".localizedCaseInsensitiveContains(search))
+                "\($0.note) \(store.snapshot.categoriesEnabled ? $0.category.title : "") \($0.paymentMethod)".localizedCaseInsensitiveContains(search))
         }
     }
     private var days: [Date] {
@@ -64,7 +65,7 @@ struct LedgerView: View {
                     }
                     HStack {
                         Image(systemName: "magnifyingglass").foregroundStyle(AppTheme.muted)
-                        TextField("搜索备注、分类或付款方式", text: $search).font(.subheadline)
+                        TextField(store.snapshot.categoriesEnabled ? "搜索备注、分类或付款方式" : "搜索备注或付款方式", text: $search).font(.subheadline)
                             .accessibilityIdentifier("ledgerSearch")
                         if !search.isEmpty {
                             Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
@@ -165,13 +166,21 @@ struct LedgerView: View {
 }
 
 struct RecordRow: View {
+    @EnvironmentObject private var store: LedgerStore
     let record: LedgerRecord
     var body: some View {
         HStack(spacing: 12) {
-            CategoryIcon(category: record.category)
+            if store.snapshot.categoriesEnabled {
+                CategoryIcon(category: record.category)
+            } else {
+                Image(systemName: record.kind == .expense ? "arrow.up.right" : "arrow.down.left")
+                    .foregroundStyle(AppTheme.accent).frame(width: 44, height: 44)
+                    .background(AppTheme.mint.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
+            }
             VStack(alignment: .leading, spacing: 5) {
-                Text(record.note.isEmpty ? record.category.title : record.note).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text(record.note.isEmpty ? (store.snapshot.categoriesEnabled ? record.category.title : record.kind.title) : record.note).font(.subheadline.weight(.semibold)).lineLimit(1)
                 HStack(spacing: 5) {
+                    Text(record.date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)))
                     Text(record.paymentMethod)
                     if !record.imageNames.isEmpty { Image(systemName: "photo"); Text("\(record.imageNames.count)") }
                 }.font(.caption).foregroundStyle(AppTheme.muted)
@@ -209,30 +218,32 @@ struct ReportsView: View {
                         Text("¥ \(Money.formatted(total))").font(.system(size: 34, weight: .semibold, design: .rounded)).lineLimit(1).minimumScaleFactor(0.5)
                         Text("\(store.records(in: month).filter { $0.kind == kind }.count) 笔记录").font(.caption).foregroundStyle(AppTheme.muted)
                     }.frame(maxWidth: .infinity, alignment: .leading).surface()
-                    Text("分类分布").font(.title3.bold())
-                    if items.isEmpty {
-                        ContentUnavailableView("还没有\(kind.title)记录", systemImage: "chart.bar", description: Text("在账本中记一笔，这里就会显示分类统计。"))
-                    } else {
-                        VStack(spacing: 22) {
-                            ForEach(items, id: \.category) { item in
-                                VStack(spacing: 10) {
-                                    HStack(spacing: 12) {
-                                        CategoryIcon(category: item.category)
-                                        Text(item.category.title).font(.subheadline.weight(.medium))
-                                        Spacer()
-                                        VStack(alignment: .trailing, spacing: 4) {
-                                            Text("¥ \(Money.formatted(item.total))").font(.subheadline.weight(.semibold))
-                                            Text(Double(item.total) / Double(max(total, 1)), format: .percent.precision(.fractionLength(1)))
-                                                .font(.caption).foregroundStyle(AppTheme.muted)
+                    if store.snapshot.categoriesEnabled {
+                        Text("分类分布").font(.title3.bold())
+                        if items.isEmpty {
+                            ContentUnavailableView("还没有\(kind.title)记录", systemImage: "chart.bar", description: Text("在账本中记一笔，这里就会显示分类统计。"))
+                        } else {
+                            VStack(spacing: 22) {
+                                ForEach(items, id: \.category) { item in
+                                    VStack(spacing: 10) {
+                                        HStack(spacing: 12) {
+                                            CategoryIcon(category: item.category)
+                                            Text(item.category.title).font(.subheadline.weight(.medium))
+                                            Spacer()
+                                            VStack(alignment: .trailing, spacing: 4) {
+                                                Text("¥ \(Money.formatted(item.total))").font(.subheadline.weight(.semibold))
+                                                Text(Double(item.total) / Double(max(total, 1)), format: .percent.precision(.fractionLength(1)))
+                                                    .font(.caption).foregroundStyle(AppTheme.muted)
+                                            }
                                         }
+                                        GeometryReader { geometry in
+                                            Capsule().fill(AppTheme.mint.opacity(0.5))
+                                            Capsule().fill(AppTheme.accent).frame(width: geometry.size.width * CGFloat(item.total) / CGFloat(max(total, 1)))
+                                        }.frame(height: 7)
                                     }
-                                    GeometryReader { geometry in
-                                        Capsule().fill(AppTheme.mint.opacity(0.5))
-                                        Capsule().fill(AppTheme.accent).frame(width: geometry.size.width * CGFloat(item.total) / CGFloat(max(total, 1)))
-                                    }.frame(height: 7)
                                 }
-                            }
-                        }.surface()
+                            }.surface()
+                        }
                     }
                 }.padding(22)
             }.background(AppTheme.background).foregroundStyle(AppTheme.ink)
@@ -294,6 +305,34 @@ struct PaymentMethodsView: View {
                 .alert("操作失败", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                     Button("知道了", role: .cancel) { error = nil }
                 } message: { Text(error ?? "") }
+        }
+    }
+}
+
+
+struct SettingsView: View {
+    @EnvironmentObject private var store: LedgerStore
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle("启用分类", isOn: Binding(
+                        get: { store.snapshot.categoriesEnabled },
+                        set: { enabled in
+                            do { try store.setCategoriesEnabled(enabled) }
+                            catch { self.error = error.localizedDescription }
+                        }
+                    )).accessibilityIdentifier("categoriesEnabled")
+                } header: { Text("记账偏好") } footer: {
+                    Text("关闭后隐藏分类选择、账单分类和分类统计，新账单归入“其他”。已有分类会保留，重新开启后可继续查看。")
+                }
+            }
+            .navigationTitle("设置")
+            .alert("设置保存失败", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+                Button("知道了", role: .cancel) { error = nil }
+            } message: { Text(error ?? "") }
         }
     }
 }

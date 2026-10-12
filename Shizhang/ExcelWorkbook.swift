@@ -53,7 +53,7 @@ enum ExcelWorkbook {
         <dimension ref="A1:H\(last)"/>
         <sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
         <sheetFormatPr defaultRowHeight="24"/>
-        <cols><col min="1" max="1" width="16" customWidth="1"/><col min="2" max="3" width="12" customWidth="1"/><col min="4" max="4" width="20" customWidth="1"/><col min="5" max="5" width="24" customWidth="1"/><col min="6" max="6" width="48" customWidth="1"/><col min="7" max="7" width="12" customWidth="1"/><col min="8" max="8" width="40" customWidth="1"/></cols>
+        <cols><col min="1" max="1" width="23" customWidth="1"/><col min="2" max="3" width="12" customWidth="1"/><col min="4" max="4" width="20" customWidth="1"/><col min="5" max="5" width="24" customWidth="1"/><col min="6" max="6" width="48" customWidth="1"/><col min="7" max="7" width="12" customWidth="1"/><col min="8" max="8" width="40" customWidth="1"/></cols>
         <sheetData>\(rows.joined())</sheetData><autoFilter ref="A1:H\(last)"/>
         </worksheet>
         """
@@ -180,7 +180,7 @@ enum ExcelWorkbook {
                 guard let kind = RecordKind.allCases.first(where: { $0.title == value("类型") }) else { throw ExcelError.message("类型必须是“支出”或“收入”。") }
                 guard let category = RecordCategory.options(for: kind).first(where: { $0.title == value("分类") }) else { throw ExcelError.message("分类不适用于\(kind.title)，请参考模板中的分类说明。") }
                 guard let amount = parseAmount(value("金额（元）")) else { throw ExcelError.message("金额必须大于 0、最多两位小数且不超过 999999999.99。") }
-                guard let date = parseDate(cell("日期"), date1904: date1904) else { throw ExcelError.message("日期无效，请输入真实的 Excel 日期或 yyyy-MM-dd。") }
+                guard let date = parseDate(cell("日期"), date1904: date1904) else { throw ExcelError.message("日期无效，请输入 Excel 日期、yyyy-MM-dd 或 yyyy-MM-dd HH:mm。") }
                 let method = value("付款方式")
                 guard !method.isEmpty, method.count <= 20 else { throw ExcelError.message("付款方式需为 1–20 个字。") }
                 let idText = value("账单ID")
@@ -216,7 +216,7 @@ enum ExcelWorkbook {
             var utc = Calendar(identifier: .gregorian)
             utc.timeZone = TimeZone(secondsFromGMT: 0)!
             let base = utc.date(from: date1904 ? DateComponents(year: 1904, month: 1, day: 1) : DateComponents(year: 1899, month: 12, day: serial < 60 ? 31 : 30))!
-            let wallDate = base.addingTimeInterval(serial * 86_400)
+            let wallDate = base.addingTimeInterval((serial * 86_400).rounded())
             var components = utc.dateComponents([.year, .month, .day, .hour, .minute, .second], from: wallDate)
             components.timeZone = .current
             var local = Calendar(identifier: .gregorian)
@@ -227,7 +227,7 @@ enum ExcelWorkbook {
             let formatter = ISO8601DateFormatter()
             if let date = formatter.date(from: value) { return date }
         }
-        for format in ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日"] {
+        for format in ["yyyy-MM-dd HH:mm", "yyyy/MM/dd HH:mm", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日"] {
             let formatter = DateFormatter()
             formatter.calendar = Calendar(identifier: .gregorian)
             formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -284,7 +284,7 @@ enum ExcelWorkbook {
             .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
     }
     private static let styles = """
-    <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="yyyy-mm-dd"/></numFmts><fonts count="2"><font><sz val="11"/><color rgb="FF1F3338"/><name val="Arial"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF217D66"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>
+    <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="yyyy-mm-dd hh:mm"/></numFmts><fonts count="2"><font><sz val="11"/><color rgb="FF1F3338"/><name val="Arial"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF217D66"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>
     """
 }
 

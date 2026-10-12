@@ -24,6 +24,23 @@ final class ExcelTests: XCTestCase {
         XCTAssertTrue(Calendar.current.isDate(batch.records[0].date, inSameDayAs: records[0].date))
     }
 
+    func testExcelPreservesHoursAndMinutes() throws {
+        var record = sample()
+        record.date = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 5, hour: 21, minute: 37)))
+        let batch = try ExcelWorkbook.read(ExcelWorkbook.export([record]), filename: "time.xlsx")
+        XCTAssertTrue(batch.issues.isEmpty)
+        let date = try XCTUnwrap(batch.records.first?.date)
+        XCTAssertEqual(Calendar.current.component(.hour, from: date), 21)
+        XCTAssertEqual(Calendar.current.component(.minute, from: date), 37)
+        let textDate = try rewriting(ExcelWorkbook.export([record])) { name, xml in
+            guard name == "xl/worksheets/sheet1.xml" else { return xml }
+            return xml.replacingOccurrences(of: #"<c r="A2".*?</c>"#, with: #"<c r="A2" t="inlineStr"><is><t>2026-10-05 21:37</t></is></c>"#, options: .regularExpression)
+        }
+        let imported = try ExcelWorkbook.read(textDate, filename: "android-time.xlsx")
+        XCTAssertTrue(imported.issues.isEmpty)
+        XCTAssertEqual(imported.records.first?.date, record.date)
+    }
+
     func testIndependentSharedStringWorkbookAndNumericExcelDates() throws {
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "ExcelSharedStrings", withExtension: "xlsx"))
         let data = try Data(contentsOf: url)

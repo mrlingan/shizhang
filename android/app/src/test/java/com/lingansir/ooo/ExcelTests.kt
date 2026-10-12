@@ -10,7 +10,7 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 class ExcelTests {
-    private fun record()=LedgerRecord(kind=Kind.EXPENSE,amountMinor=1299,category=Category.FOOD,paymentMethod="微信支付",date=LocalDate.of(2026,10,5),note="午餐 <家常> & 茶\n=不是公式 😀")
+    private fun record()=LedgerRecord(kind=Kind.EXPENSE,amountMinor=1299,category=Category.FOOD,paymentMethod="微信支付",date=LocalDate.of(2026,10,5).atStartOfDay(),note="午餐 <家常> & 茶\n=不是公式 😀")
     private fun fixture(name: String)=javaClass.classLoader!!.getResourceAsStream(name)!!.use { it.readBytes() }
     private fun mutate(bytes: ByteArray, change: (String,String)->String): ByteArray {
         val output=ByteArrayOutputStream()
@@ -23,6 +23,16 @@ class ExcelTests {
         val r=record().copy(imageNames=listOf("00000000-0000-0000-0000-000000000000.jpg"))
         val batch=ExcelWorkbook.read(ExcelWorkbook.export(listOf(r)),"账单.xlsx")
         assertTrue(batch.issues.toString(),batch.issues.isEmpty()); assertEquals(listOf(r.copy(imageNames=emptyList())),batch.records); assertEquals(1,batch.rowsWithImages)
+    }
+    @Test fun excelPreservesHoursAndMinutes() {
+        val record=record().copy(date=LocalDate.of(2026,10,5).atTime(21,37))
+        val batch=ExcelWorkbook.read(ExcelWorkbook.export(listOf(record)),"time.xlsx")
+        assertTrue(batch.issues.toString(),batch.issues.isEmpty())
+        assertEquals(record,batch.records.single())
+        val invalid=mutate(ExcelWorkbook.export(listOf(record))) { name,xml ->
+            if(name.endsWith("sheet1.xml"))xml.replace("2026-10-05 21:37","2026-10-05 24:61") else xml
+        }
+        assertEquals(1,ExcelWorkbook.read(invalid,"bad-time.xlsx").issues.size)
     }
     @Test fun readsIPhoneTemplateAndExternalSharedStringsFixture() {
         assertTrue(ExcelWorkbook.read(fixture("template.xlsx"),"模板.xlsx").records.isEmpty())
@@ -39,9 +49,9 @@ class ExcelTests {
                 else -> xml
             }
         }
-        assertEquals(LocalDate.of(1900,1,1),ExcelWorkbook.read(serial("1"),"x").records.single().date)
-        assertEquals(LocalDate.of(1900,3,1),ExcelWorkbook.read(serial("61.5"),"x").records.single().date)
-        assertEquals(LocalDate.of(1904,1,1),ExcelWorkbook.read(serial("0",true),"x").records.single().date)
+        assertEquals(LocalDate.of(1900,1,1).atStartOfDay(),ExcelWorkbook.read(serial("1"),"x").records.single().date)
+        assertEquals(LocalDate.of(1900,3,1).atTime(12,0),ExcelWorkbook.read(serial("61.5"),"x").records.single().date)
+        assertEquals(LocalDate.of(1904,1,1).atStartOfDay(),ExcelWorkbook.read(serial("0",true),"x").records.single().date)
         assertEquals(1,ExcelWorkbook.read(serial("60"),"x").issues.size)
     }
     @Test fun invalidAmountFormulaCategoryAndIdProduceRowIssues() {

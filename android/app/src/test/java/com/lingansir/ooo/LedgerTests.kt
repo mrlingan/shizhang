@@ -10,7 +10,30 @@ import java.time.YearMonth
 
 class LedgerTests {
     @get:Rule val folder=TemporaryFolder()
-    private fun record(amount: Long=12345)=LedgerRecord(kind=Kind.EXPENSE,amountMinor=amount,category=Category.FOOD,paymentMethod="微信支付",date=LocalDate.of(2026,10,5))
+    private fun record(amount: Long=12345)=LedgerRecord(kind=Kind.EXPENSE,amountMinor=amount,category=Category.FOOD,paymentMethod="微信支付",date=LocalDate.of(2026,10,5).atStartOfDay())
+    @Test fun legacyDatesMigrateAndCategoryPreferencePreservesRecords() {
+        val dir=folder.newFolder(); val original=record()
+        val legacy=org.json.JSONObject(LedgerJson.encode(LedgerSnapshot(records=listOf(original))))
+        legacy.remove("categoriesEnabled")
+        legacy.getJSONArray("records").getJSONObject(0).put("date","2026-10-05")
+        File(dir,"ledger.json").writeText(legacy.toString())
+        val store=LedgerStore(dir)
+        assertNull(store.loadError); assertTrue(store.snapshot.categoriesEnabled)
+        assertEquals(original,store.snapshot.records.single())
+        store.setCategoriesEnabled(false)
+        assertFalse(LedgerStore(dir).snapshot.categoriesEnabled)
+        assertEquals(listOf(original),LedgerStore(dir).snapshot.records)
+        store.setCategoriesEnabled(true)
+        assertTrue(LedgerStore(dir).snapshot.categoriesEnabled)
+    }
+    @Test fun timesSurviveReloadAndSortWithinOneDay() {
+        val dir=folder.newFolder(); val store=LedgerStore(dir)
+        val morning=record().copy(date=LocalDate.of(2026,10,5).atTime(8,15))
+        val evening=record().copy(date=LocalDate.of(2026,10,5).atTime(21,37))
+        store.save(morning); store.save(evening)
+        val records=LedgerStore(dir).snapshot.records.inMonth(YearMonth.of(2026,10))
+        assertEquals(listOf(evening,morning),records)
+    }
     @Test fun decimalMoneyRemainsExactAndRejectsInvalidInput() {
         assertEquals(29L,Money.parse("0.29")); assertEquals(12340L,Money.parse(" 123.4 "))
         assertEquals(Money.MAX,Money.parse("999999999.99")); assertEquals(12300L,Money.parse("123."))
@@ -63,7 +86,7 @@ class LedgerTests {
         assertEquals(before,store.snapshot)
     }
     @Test fun monthTotalsRespectKindAndMonth() {
-        val records=listOf(record(),record(55).copy(kind=Kind.INCOME,category=Category.SALARY),record(77).copy(date=LocalDate.of(2026,9,30)))
+        val records=listOf(record(),record(55).copy(kind=Kind.INCOME,category=Category.SALARY),record(77).copy(date=LocalDate.of(2026,9,30).atStartOfDay()))
         val month=records.inMonth(YearMonth.of(2026,10))
         assertEquals(12345L,month.total(Kind.EXPENSE)); assertEquals(55L,month.total(Kind.INCOME)); assertEquals(2,month.size)
     }

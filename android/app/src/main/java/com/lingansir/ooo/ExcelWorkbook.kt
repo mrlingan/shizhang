@@ -6,6 +6,9 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.math.RoundingMode
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.ResolverStyle
@@ -50,7 +53,7 @@ object ExcelWorkbook {
         records.sortedBy { it.date }.forEachIndexed { i, r ->
             val row = i + 2
             rows.append("<row r=\"$row\">")
-            val values = listOf(r.date.toString(), r.kind.title, r.category.title, Money.input(r.amountMinor),
+            val values = listOf(r.date.format(LedgerDates.display), r.kind.title, r.category.title, Money.input(r.amountMinor),
                 r.paymentMethod, r.note, r.imageNames.size.toString(), r.id)
             values.forEachIndexed { col, value ->
                 if (col == 3 || col == 6) rows.append("<c r=\"${('A'.code+col).toChar()}$row\" s=\"${if (col == 3) 2 else 0}\"><v>$value</v></c>")
@@ -154,7 +157,7 @@ object ExcelWorkbook {
                 val kind = Kind.entries.find { it.title == value("类型") } ?: error("类型必须是“支出”或“收入”。")
                 val category = Category.options(kind).find { it.title == value("分类") } ?: error("分类不适用于${kind.title}，请参考模板。")
                 val amount = Money.parseExcel(value("金额（元）")) ?: error("金额需大于 0、最多两位小数，最大 999999999.99。")
-                val date = parseDate(cell("日期"), date1904) ?: error("日期无效，请输入 Excel 日期或 yyyy-MM-dd。")
+                val date = parseDate(cell("日期"), date1904) ?: error("日期无效，请输入 Excel 日期、yyyy-MM-dd 或 yyyy-MM-dd HH:mm。")
                 val method = value("付款方式")
                 require(method.isNotEmpty() && method.codePointCount(0, method.length) <= 20) { "付款方式需为 1–20 个字。" }
                 val idText = value("账单ID")
@@ -168,7 +171,7 @@ object ExcelWorkbook {
         return ImportBatch(filename, records, issues, imageRows)
     }
     private data class Cell(val value: String, val type: String, val formula: Boolean)
-    private fun parseDate(cell: Cell, date1904: Boolean): LocalDate? = runCatching {
+    private fun parseDate(cell: Cell, date1904: Boolean): LocalDateTime? = runCatching {
         val value = cell.value.trim()
         if (cell.type == "n") {
             val serial = BigDecimal(value)
@@ -176,14 +179,20 @@ object ExcelWorkbook {
             require(serial >= BigDecimal(if (date1904) 0 else 1) && serial < BigDecimal(max))
             val day = serial.toLong()
             require(date1904 || day != 60L)
-            if (date1904) LocalDate.of(1904, 1, 1).plusDays(day)
-            else LocalDate.of(1899, 12, 31).plusDays(if (day > 60) day - 1 else day)
+            val date = if (date1904) LocalDate.of(1904, 1, 1).plusDays(day)
+                else LocalDate.of(1899, 12, 31).plusDays(if (day > 60) day - 1 else day)
+            val seconds = serial.subtract(BigDecimal(day)).multiply(BigDecimal(86400))
+                .setScale(0, RoundingMode.HALF_UP).longValueExact()
+            date.atStartOfDay().plusSeconds(seconds)
         } else {
-            if (cell.type == "d" && value.contains('T')) OffsetDateTime.parse(value).toLocalDate()
+            if (cell.type == "d" && value.contains('T')) OffsetDateTime.parse(value).atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime()
             else {
                 val formats = listOf("uuuu-MM-dd", "uuuu/MM/dd", "uuuu年MM月dd日")
-                formats.firstNotNullOfOrNull { format -> runCatching {
-                    LocalDate.parse(value, DateTimeFormatter.ofPattern(format).withResolverStyle(ResolverStyle.STRICT))
+                val dateTimes = listOf("uuuu-MM-dd HH:mm", "uuuu/MM/dd HH:mm", "uuuu-MM-dd'T'HH:mm", "uuuu-MM-dd'T'HH:mm:ss")
+                dateTimes.firstNotNullOfOrNull { format -> runCatching {
+                    LocalDateTime.parse(value, DateTimeFormatter.ofPattern(format).withResolverStyle(ResolverStyle.STRICT))
+                }.getOrNull() } ?: formats.firstNotNullOfOrNull { format -> runCatching {
+                    LocalDate.parse(value, DateTimeFormatter.ofPattern(format).withResolverStyle(ResolverStyle.STRICT)).atStartOfDay()
                 }.getOrNull() } ?: error("日期格式无效")
             }
         }.also { require(it.year in 1..9999) }

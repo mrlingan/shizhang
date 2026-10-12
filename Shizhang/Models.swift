@@ -59,6 +59,17 @@ struct LedgerRecord: Identifiable, Codable, Equatable, Sendable {
 struct LedgerSnapshot: Codable {
     var records: [LedgerRecord] = []
     var paymentMethods: [String] = ["微信支付", "支付宝", "银行卡", "现金"]
+    var categoriesEnabled = true
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey { case records, paymentMethods, categoriesEnabled }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        records = try container.decode([LedgerRecord].self, forKey: .records)
+        paymentMethods = try container.decode([String].self, forKey: .paymentMethods)
+        categoriesEnabled = try container.decodeIfPresent(Bool.self, forKey: .categoriesEnabled) ?? true
+    }
 }
 
 enum Money {

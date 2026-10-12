@@ -2,6 +2,28 @@ import XCTest
 @testable import Shizhang
 
 final class LedgerTests: XCTestCase {
+    @MainActor
+    func testCategoryPreferenceMigratesAndPersistsWithoutChangingRecords() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LedgerStore(directory: directory)
+        let record = LedgerRecord(kind: .expense, amountMinor: 100, category: .food, paymentMethod: "现金", date: Date(), note: "", imageNames: [])
+        try store.save(record, newImages: [])
+        let file = directory.appendingPathComponent("ledger.json")
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        legacy.removeValue(forKey: "categoriesEnabled")
+        try JSONSerialization.data(withJSONObject: legacy).write(to: file)
+        let migrated = LedgerStore(directory: directory)
+        XCTAssertNil(migrated.loadError)
+        XCTAssertTrue(migrated.snapshot.categoriesEnabled)
+        try migrated.setCategoriesEnabled(false)
+        let reloaded = LedgerStore(directory: directory)
+        XCTAssertFalse(reloaded.snapshot.categoriesEnabled)
+        XCTAssertEqual(reloaded.records, [record])
+        try reloaded.setCategoriesEnabled(true)
+        XCTAssertTrue(LedgerStore(directory: directory).snapshot.categoriesEnabled)
+    }
+
     func testAmountsAreExactAndRejectInvalidInput() {
         XCTAssertEqual(Money.parse("0.01"), 1)
         XCTAssertEqual(Money.parse("12.3"), 1230)

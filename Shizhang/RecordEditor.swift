@@ -58,22 +58,24 @@ struct RecordEditor: View {
                             Text("人民币 · 精确到分").font(.caption).foregroundStyle(AppTheme.muted)
                         }
                     }.surface()
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("分类").font(.headline)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 68))], spacing: 14) {
-                            ForEach(RecordCategory.options(for: kind)) { item in
-                                Button { category = item; amountFocused = false } label: {
-                                    VStack(spacing: 8) {
-                                        Image(systemName: item.symbol).font(.system(size: 20))
-                                            .frame(width: 48, height: 48)
-                                            .background(category == item ? AppTheme.accent : AppTheme.background, in: RoundedRectangle(cornerRadius: 16))
-                                            .foregroundStyle(category == item ? .white : AppTheme.accent)
-                                        Text(item.title).font(.caption).foregroundStyle(AppTheme.ink)
-                                    }.frame(maxWidth: .infinity)
-                                }.buttonStyle(.plain).accessibilityAddTraits(category == item ? .isSelected : [])
+                    if store.snapshot.categoriesEnabled {
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("分类").font(.headline)
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 68))], spacing: 14) {
+                                ForEach(RecordCategory.options(for: kind)) { item in
+                                    Button { category = item; amountFocused = false } label: {
+                                        VStack(spacing: 8) {
+                                            Image(systemName: item.symbol).font(.system(size: 20))
+                                                .frame(width: 48, height: 48)
+                                                .background(category == item ? AppTheme.accent : AppTheme.background, in: RoundedRectangle(cornerRadius: 16))
+                                                .foregroundStyle(category == item ? .white : AppTheme.accent)
+                                            Text(item.title).font(.caption).foregroundStyle(AppTheme.ink)
+                                        }.frame(maxWidth: .infinity)
+                                    }.buttonStyle(.plain).accessibilityAddTraits(category == item ? .isSelected : [])
+                                }
                             }
-                        }
-                    }.surface()
+                        }.surface()
+                    }
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
                             Text("付款方式").font(.headline)
@@ -93,7 +95,7 @@ struct RecordEditor: View {
                         }
                     }.surface()
                     VStack(alignment: .leading, spacing: 18) {
-                        DatePicker("日期", selection: $date, displayedComponents: .date).font(.subheadline)
+                        DatePicker("日期与时间", selection: $date, displayedComponents: [.date, .hourAndMinute]).font(.subheadline)
                         Divider()
                         TextField("写点备注，例如：和朋友吃晚饭", text: $note, axis: .vertical)
                             .font(.subheadline).lineLimit(2...4).accessibilityIdentifier("recordNote")
@@ -238,7 +240,7 @@ struct RecordEditor: View {
 
     private func save() {
         guard let value = Money.parse(amount) else { return }
-        let record = LedgerRecord(id: original?.id ?? UUID(), kind: kind, amountMinor: value, category: category,
+        let record = LedgerRecord(id: original?.id ?? UUID(), kind: kind, amountMinor: value, category: store.snapshot.categoriesEnabled ? category : (original.map { $0.kind == kind ? $0.category : .other } ?? .other),
                                   paymentMethod: paymentMethod, date: date, note: note.trimmingCharacters(in: .whitespacesAndNewlines), imageNames: retainedNames)
         do { try store.save(record, newImages: newImages); dismiss() }
         catch { self.error = error.localizedDescription }
